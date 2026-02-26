@@ -547,16 +547,16 @@ function decide(id, decision) {
   undoHistory.push({ id, oldDecision: old, newDecision: b.decision });
   
   if (b.decision) showToast(`"${b.title.substring(0,35)}…" → ${b.decision.toUpperCase()}`);
-  
-  // Auto-advance
-  if (b.decision !== null) {
-    const ci = visibleIds.indexOf(id);
-    const next = visibleIds.find((vid, i) => i > ci && !bookmarks.find(x => x.id === vid).decision);
-    if (next !== undefined) setTimeout(() => selectBookmark(next), 120);
-  }
-  
+
   renderList();
   debouncedSave();
+
+  // Auto-advance to next visible bookmark after re-render
+  if (b.decision !== null && visibleIds.length > 0) {
+    // Item may have been removed from visibleIds (e.g. deleted), so pick the first undecided
+    const next = visibleIds.find(vid => !bookmarks.find(x => x.id === vid).decision);
+    if (next !== undefined) setTimeout(() => selectBookmark(next), 120);
+  }
 }
 
 function bulkFolder(groupName, decision) {
