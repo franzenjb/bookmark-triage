@@ -146,7 +146,17 @@ body { font-family: var(--font-body); background: var(--arc-cream); color: var(-
   text-decoration: none; white-space: nowrap; padding: 3px 10px; border: 1px solid var(--arc-info); border-radius: 20px; transition: all 0.15s;
 }
 .preview-open:hover { background: var(--arc-info); color: white; }
-.preview-frame { flex: 1; border: none; background: white; }
+.preview-thumb-wrap {
+  flex: 1; overflow-y: auto; background: white; display: flex; align-items: flex-start; justify-content: center; padding: 16px;
+}
+.preview-thumb {
+  max-width: 100%; border: 1px solid var(--arc-gray-100); border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.preview-loading {
+  flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--arc-gray-300);
+}
+.preview-loading .loading-spinner { width: 24px; height: 24px; }
 .preview-placeholder {
   flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--arc-gray-300);
 }
@@ -263,9 +273,14 @@ body { font-family: var(--font-body); background: var(--arc-cream); color: var(-
     <div class="preview-placeholder" id="preview-placeholder">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="7" cy="6" r="1"/><circle cx="11" cy="6" r="1"/></svg>
       <p>Click a bookmark to preview</p>
-      <p style="font-size:11px;color:var(--arc-gray-300);">Some sites block iframe previews — use "Open in new tab"</p>
     </div>
-    <iframe class="preview-frame" id="preview-frame" style="display:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    <div class="preview-loading" id="preview-loading" style="display:none;">
+      <div class="loading-spinner"></div>
+      <p style="font-size:13px;">Loading preview...</p>
+    </div>
+    <div class="preview-thumb-wrap" id="preview-thumb-wrap" style="display:none;">
+      <img class="preview-thumb" id="preview-thumb" alt="Site preview">
+    </div>
   </div>
 </div>
 
@@ -488,21 +503,37 @@ function selectBookmark(id) {
   selectedIdx = id;
   const b = bookmarks.find(x => x.id === id);
   if (!b) return;
-  
+
   document.querySelectorAll('.bookmark-card').forEach(el => el.classList.remove('selected'));
   const card = document.querySelector(`.bookmark-card[data-id="${id}"]`);
   if (card) {
     card.classList.add('selected');
     card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
-  
+
   document.getElementById('preview-header').style.display = 'flex';
   document.getElementById('preview-url').textContent = b.url;
   document.getElementById('preview-open').href = b.url;
   document.getElementById('preview-placeholder').style.display = 'none';
-  const frame = document.getElementById('preview-frame');
-  frame.style.display = 'block';
-  frame.src = b.url;
+
+  // Show loading state, hide thumbnail
+  document.getElementById('preview-loading').style.display = 'flex';
+  document.getElementById('preview-thumb-wrap').style.display = 'none';
+
+  // Load screenshot thumbnail
+  const thumb = document.getElementById('preview-thumb');
+  const img = new Image();
+  img.onload = () => {
+    thumb.src = img.src;
+    document.getElementById('preview-loading').style.display = 'none';
+    document.getElementById('preview-thumb-wrap').style.display = 'flex';
+  };
+  img.onerror = () => {
+    document.getElementById('preview-loading').style.display = 'none';
+    document.getElementById('preview-thumb-wrap').style.display = 'none';
+    document.getElementById('preview-placeholder').style.display = 'flex';
+  };
+  img.src = 'https://image.thum.io/get/width/800/' + b.url;
 }
 
 function decide(id, decision) {
