@@ -413,6 +413,8 @@ function escapeHtml(str) {
 
 function getFilteredBookmarks() {
   return bookmarks.filter(b => {
+    // Hide deleted bookmarks unless specifically viewing the Delete filter
+    if (b.decision === 'delete' && activeFilter !== 'delete') return false;
     if (activeFilter === 'undecided' && b.decision !== null) return false;
     if (activeFilter === 'keep' && b.decision !== 'keep') return false;
     if (activeFilter === 'star' && b.decision !== 'star') return false;
