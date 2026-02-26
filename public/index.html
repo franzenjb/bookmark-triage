@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bookmark Triage — Dragon</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='12' y='4' width='8' height='24' fill='%23ED1B2E'/><rect x='4' y='12' width='24' height='8' fill='%23ED1B2E'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+Pro:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --arc-red: #ED1B2E;
+  --arc-black: #1a1a1a;
+  --arc-cream: #f7f5f2;
+  --arc-gray-900: #2d2d2d;
+  --arc-gray-700: #4a4a4a;
+  --arc-gray-500: #737373;
+  --arc-gray-300: #a3a3a3;
+  --arc-gray-100: #e5e5e5;
+  --arc-white: #fff;
+  --arc-info: #1e4a6d;
+  --arc-success: #2d5a27;
+  --arc-caution: #b8860b;
+  --font-headline: 'Libre Baskerville', Georgia, serif;
+  --font-body: 'Source Sans Pro', 'Helvetica Neue', sans-serif;
+  --font-data: 'IBM Plex Mono', Consolas, monospace;
+  --keep-color: #2d5a27;
+  --star-color: #b8860b;
+  --delete-color: #c41e3a;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-body); background: var(--arc-cream); color: var(--arc-gray-900); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Loading */
+.loading-screen {
+  position: fixed; inset: 0; background: var(--arc-cream); z-index: 1000;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+}
+.loading-screen.hidden { display: none; }
+.loading-spinner { width: 32px; height: 32px; border: 3px solid var(--arc-gray-100); border-top-color: var(--arc-red); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Header */
+.header {
+  background: var(--arc-white);
+  border-bottom: 3px solid var(--arc-black);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header h1 { font-family: var(--font-headline); font-size: 22px; font-weight: 700; color: var(--arc-black); }
+.header-subtitle { font-size: 13px; color: var(--arc-gray-500); font-weight: 300; }
+.save-indicator { font-family: var(--font-data); font-size: 11px; color: var(--arc-gray-300); }
+.save-indicator.saving { color: var(--arc-caution); }
+.save-indicator.saved { color: var(--arc-success); }
+
+/* Stats bar */
+.stats-bar {
+  background: var(--arc-white);
+  border-bottom: 1px solid var(--arc-gray-100);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-shrink: 0;
+}
+.stat { display: flex; align-items: baseline; gap: 6px; }
+.stat-value { font-family: var(--font-data); font-size: 20px; font-weight: 600; }
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--arc-gray-500); font-weight: 600; }
+.stat-keep .stat-value { color: var(--keep-color); }
+.stat-star .stat-value { color: var(--star-color); }
+.stat-delete .stat-value { color: var(--delete-color); }
+.stat-remaining .stat-value { color: var(--arc-black); }
+.stat-progress { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.progress-bar { width: 180px; height: 5px; background: var(--arc-gray-100); }
+.progress-fill { height: 100%; background: var(--arc-red); transition: width 0.3s ease; }
+.progress-pct { font-family: var(--font-data); font-size: 13px; color: var(--arc-gray-500); }
+
+/* Filter bar */
+.filter-bar {
+  background: var(--arc-white);
+  border-bottom: 1px solid var(--arc-gray-100);
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.filter-bar label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--arc-gray-500); }
+.filter-pill {
+  padding: 4px 12px; border: 1px solid var(--arc-gray-300); border-radius: 20px;
+  background: transparent; font-family: var(--font-body); font-size: 12px; color: var(--arc-gray-700); cursor: pointer; transition: all 0.15s;
+}
+.filter-pill:hover { border-color: var(--arc-black); color: var(--arc-black); }
+.filter-pill.active { background: var(--arc-black); color: var(--arc-white); border-color: var(--arc-black); }
+.search-input {
+  margin-left: auto; padding: 5px 14px; border: 1px solid var(--arc-gray-300); border-radius: 20px;
+  font-family: var(--font-body); font-size: 12px; width: 220px; outline: none; background: var(--arc-cream);
+}
+.search-input:focus { border-color: var(--arc-black); background: var(--arc-white); }
+
+/* Main split */
+.main { flex: 1; display: flex; overflow: hidden; }
+
+/* Left panel */
+.panel-left { width: 50%; border-right: 1px solid var(--arc-gray-100); display: flex; flex-direction: column; background: var(--arc-cream); }
+.bookmark-list { flex: 1; overflow-y: auto; padding: 6px; }
+
+/* Bookmark card */
+.bookmark-card {
+  background: var(--arc-white); border: 1px solid var(--arc-gray-100); margin-bottom: 3px;
+  padding: 10px 14px; cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 10px;
+}
+.bookmark-card:hover { border-color: var(--arc-gray-300); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.bookmark-card.selected { border-left: 3px solid var(--arc-red); background: #fefdfb; }
+.bookmark-card.decided-keep { border-left: 3px solid var(--keep-color); opacity: 0.65; }
+.bookmark-card.decided-star { border-left: 3px solid var(--star-color); opacity: 0.65; }
+.bookmark-card.decided-delete { border-left: 3px solid var(--delete-color); opacity: 0.45; }
+.bookmark-card.decided-delete .bm-title { text-decoration: line-through; color: var(--arc-gray-500); }
+
+.bm-favicon { width: 18px; height: 18px; flex-shrink: 0; border-radius: 2px; }
+.bm-content { flex: 1; min-width: 0; }
+.bm-title { font-size: 13px; font-weight: 600; color: var(--arc-black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-meta { font-size: 10px; color: var(--arc-gray-500); font-family: var(--font-data); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.bm-actions { display: flex; gap: 3px; flex-shrink: 0; }
+.action-btn {
+  width: 30px; height: 30px; border: 1px solid var(--arc-gray-100); background: var(--arc-white);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.12s; border-radius: 2px;
+}
+.action-btn:hover { transform: scale(1.08); }
+.action-btn.btn-keep:hover, .action-btn.btn-keep.active { background: var(--keep-color); color: white; border-color: var(--keep-color); }
+.action-btn.btn-star:hover, .action-btn.btn-star.active { background: var(--star-color); color: white; border-color: var(--star-color); }
+.action-btn.btn-delete:hover, .action-btn.btn-delete.active { background: var(--delete-color); color: white; border-color: var(--delete-color); }
+
+/* Right panel */
+.panel-right { width: 50%; display: flex; flex-direction: column; background: var(--arc-gray-100); }
+.preview-header {
+  background: var(--arc-white); padding: 8px 16px; border-bottom: 1px solid var(--arc-gray-100);
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.preview-url { font-family: var(--font-data); font-size: 11px; color: var(--arc-gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.preview-open {
+  font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--arc-info);
+  text-decoration: none; white-space: nowrap; padding: 3px 10px; border: 1px solid var(--arc-info); border-radius: 20px; transition: all 0.15s;
+}
+.preview-open:hover { background: var(--arc-info); color: white; }
+.preview-frame { flex: 1; border: none; background: white; }
+.preview-placeholder {
+  flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--arc-gray-300);
+}
+.preview-placeholder p { font-size: 13px; }
+
+/* Folder group */
+.folder-group {
+  padding: 6px 14px 3px; font-family: var(--font-data); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px; color: var(--arc-gray-500);
+  display: flex; align-items: center; gap: 8px; position: sticky; top: 0; background: var(--arc-cream); z-index: 5;
+}
+.folder-count { background: var(--arc-gray-100); padding: 1px 7px; border-radius: 10px; font-size: 9px; }
+.folder-bulk-btns { margin-left: auto; display: flex; gap: 3px; }
+.folder-bulk-btn {
+  font-family: var(--font-body); font-size: 9px; font-weight: 600; padding: 2px 7px;
+  border: 1px solid var(--arc-gray-300); background: var(--arc-white); cursor: pointer;
+  border-radius: 2px; color: var(--arc-gray-500); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.folder-bulk-btn:hover { border-color: var(--arc-black); color: var(--arc-black); }
+
+/* Bottom bar */
+.keyboard-hints {
+  background: var(--arc-white); border-top: 1px solid var(--arc-gray-100);
+  padding: 7px 24px; display: flex; gap: 20px; align-items: center; flex-shrink: 0;
+}
+.hint { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--arc-gray-500); }
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px;
+  padding: 0 5px; background: var(--arc-cream); border: 1px solid var(--arc-gray-300); border-radius: 3px;
+  font-family: var(--font-data); font-size: 10px; font-weight: 600; color: var(--arc-gray-700);
+}
+.export-section { margin-left: auto; display: flex; gap: 6px; }
+.export-btn {
+  padding: 5px 14px; font-family: var(--font-body); font-size: 12px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s;
+}
+.export-btn.primary { background: var(--arc-red); color: white; }
+.export-btn.primary:hover { background: #d01828; }
+.export-btn.secondary { background: transparent; color: var(--arc-gray-700); border: 1px solid var(--arc-gray-300); }
+.export-btn.secondary:hover { border-color: var(--arc-black); color: var(--arc-black); }
+.export-btn.danger { background: transparent; color: var(--delete-color); border: 1px solid var(--delete-color); }
+.export-btn.danger:hover { background: var(--delete-color); color: white; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 56px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--arc-black); color: white; padding: 8px 18px; font-size: 13px;
+  display: flex; align-items: center; gap: 10px; opacity: 0; transition: all 0.2s; z-index: 100; pointer-events: none;
+}
+.toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.toast-undo { color: var(--star-color); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--arc-cream); }
+::-webkit-scrollbar-thumb { background: var(--arc-gray-300); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--arc-gray-500); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .panel-right { display: none; }
+  .panel-left { width: 100%; }
+  .stats-bar { gap: 16px; flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loading">
+  <div class="loading-spinner"></div>
+  <p style="font-size:14px;color:var(--arc-gray-500);">Loading 1,327 bookmarks...</p>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <svg viewBox="0 0 32 32" width="26" height="26"><rect x="12" y="4" width="8" height="24" fill="#ED1B2E"/><rect x="4" y="12" width="24" height="8" fill="#ED1B2E"/></svg>
+    <div>
+      <h1>Bookmark Triage</h1>
+      <div class="header-subtitle">K=Keep S=Star D=Delete ↑↓=Nav Z=Undo /=Search</div>
+    </div>
+  </div>
+  <span class="save-indicator" id="save-indicator">Auto-saves to browser</span>
+</div>
+
+<div class="stats-bar">
+  <div class="stat stat-keep"><span class="stat-value" id="stat-keep">0</span><span class="stat-label">Keep</span></div>
+  <div class="stat stat-star"><span class="stat-value" id="stat-star">0</span><span class="stat-label">★ Priority</span></div>
+  <div class="stat stat-delete"><span class="stat-value" id="stat-delete">0</span><span class="stat-label">Delete</span></div>
+  <div class="stat stat-remaining"><span class="stat-value" id="stat-remaining">0</span><span class="stat-label">Undecided</span></div>
+  <div class="stat-progress">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <span class="progress-pct" id="progress-pct">0%</span>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <label>Show:</label>
+  <button class="filter-pill active" data-filter="all">All</button>
+  <button class="filter-pill" data-filter="undecided">Undecided</button>
+  <button class="filter-pill" data-filter="keep">Keep</button>
+  <button class="filter-pill" data-filter="star">★ Priority</button>
+  <button class="filter-pill" data-filter="delete">Delete</button>
+  <input type="text" class="search-input" id="search-input" placeholder="Search title, URL, or folder...">
+</div>
+
+<div class="main">
+  <div class="panel-left">
+    <div class="bookmark-list" id="bookmark-list"></div>
+  </div>
+  <div class="panel-right">
+    <div class="preview-header" id="preview-header" style="display:none;">
+      <span class="preview-url" id="preview-url"></span>
+      <a class="preview-open" id="preview-open" href="#" target="_blank">Open in new tab ↗</a>
+    </div>
+    <div class="preview-placeholder" id="preview-placeholder">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="7" cy="6" r="1"/><circle cx="11" cy="6" r="1"/></svg>
+      <p>Click a bookmark to preview</p>
+      <p style="font-size:11px;color:var(--arc-gray-300);">Some sites block iframe previews — use "Open in new tab"</p>
+    </div>
+    <iframe class="preview-frame" id="preview-frame" style="display:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+  </div>
+</div>
+
+<div class="keyboard-hints">
+  <div class="hint"><span class="kbd">K</span> Keep</div>
+  <div class="hint"><span class="kbd">S</span> Star</div>
+  <div class="hint"><span class="kbd">D</span> Delete</div>
+  <div class="hint"><span class="kbd">↑↓</span> Nav</div>
+  <div class="hint"><span class="kbd">Z</span> Undo</div>
+  <div class="hint"><span class="kbd">/</span> Search</div>
+  <div class="export-section">
+    <button class="export-btn danger" onclick="resetAll()">Reset All</button>
+    <button class="export-btn secondary" onclick="exportJSON()">Save JSON</button>
+    <button class="export-btn primary" onclick="exportBookmarks()">Export Bookmarks</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span id="toast-msg"></span>
+  <span class="toast-undo" onclick="undo()">Undo (Z)</span>
+</div>
+
+<script>
+// ============================================================
+// STORAGE LAYER — localStorage with auto-save
+// ============================================================
+const STORAGE_KEY = 'dragon_bookmark_triage';
+const STORAGE_VERSION = 1;
+
+function saveDecisions() {
+  const indicator = document.getElementById('save-indicator');
+  indicator.textContent = 'Saving...';
+  indicator.className = 'save-indicator saving';
+  
+  const decisions = {};
+  bookmarks.forEach(b => {
+    if (b.decision) decisions[b.id] = b.decision;
+  });
+  
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: STORAGE_VERSION,
+      updated: new Date().toISOString(),
+      decisions
+    }));
+    indicator.textContent = `Saved ${Object.keys(decisions).length} decisions`;
+    indicator.className = 'save-indicator saved';
+  } catch(e) {
+    indicator.textContent = 'Save failed!';
+    indicator.className = 'save-indicator saving';
+    console.error('Save failed:', e);
+  }
+}
+
+function loadDecisions() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw);
+    if (data.version !== STORAGE_VERSION) return {};
+    return data.decisions || {};
+  } catch { return {}; }
+}
+
+// Debounced save
+let saveTimer;
+function debouncedSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDecisions, 500);
+}
+
+// ============================================================
+// DATA
+// ============================================================
+let bookmarks = [];
+let selectedIdx = -1;
+let activeFilter = 'all';
+let searchQuery = '';
+let undoHistory = [];
+let visibleIds = [];
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  // Load bookmark data from JSON file
+  const resp = await fetch('/bookmarks.json');
+  const rawData = await resp.json();
+  
+  // Restore saved decisions
+  const saved = loadDecisions();
+  
+  bookmarks = rawData.map(b => ({
+    ...b,
+    decision: saved[b.id] || null
+  }));
+  
+  document.getElementById('loading').classList.add('hidden');
+  renderList();
+  
+  const savedCount = Object.keys(saved).length;
+  if (savedCount > 0) {
+    showToast(`Restored ${savedCount} saved decisions`);
+  }
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function getDomain(url) {
+  try { return new URL(url).hostname.replace('www.', ''); } catch { return ''; }
+}
+
+function getFavicon(url) {
+  const d = getDomain(url);
+  return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=32` : '';
+}
+
+function getTopFolder(folder) {
+  const parts = folder.split(' > ');
+  const start = parts[0] === 'Bookmarks Bar' ? 1 : 0;
+  return parts.slice(start, start + 2).join(' > ') || 'Root';
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function getFilteredBookmarks() {
+  return bookmarks.filter(b => {
+    if (activeFilter === 'undecided' && b.decision !== null) return false;
+    if (activeFilter === 'keep' && b.decision !== 'keep') return false;
+    if (activeFilter === 'star' && b.decision !== 'star') return false;
+    if (activeFilter === 'delete' && b.decision !== 'delete') return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q) || b.folder.toLowerCase().includes(q);
+    }
+    return true;
+  });
+}
+
+function renderList() {
+  const list = document.getElementById('bookmark-list');
+  const filtered = getFilteredBookmarks();
+  
+  const groups = {};
+  filtered.forEach(b => {
+    const g = getTopFolder(b.folder);
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(b);
+  });
+  
+  visibleIds = [];
+  let html = '';
+  
+  for (const [groupName, items] of Object.entries(groups)) {
+    const gn = groupName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    html += `<div class="folder-group">
+      <span>${escapeHtml(groupName)}</span>
+      <span class="folder-count">${items.length}</span>
+      <div class="folder-bulk-btns">
+        <button class="folder-bulk-btn" onclick="bulkFolder('${gn}', 'keep')">All Keep</button>
+        <button class="folder-bulk-btn" onclick="bulkFolder('${gn}', 'delete')">All Delete</button>
+      </div>
+    </div>`;
+    
+    items.forEach(b => {
+      visibleIds.push(b.id);
+      const dec = b.decision ? `decided-${b.decision}` : '';
+      const sel = b.id === selectedIdx ? 'selected' : '';
+      
+      html += `<div class="bookmark-card ${dec} ${sel}" data-id="${b.id}" onclick="selectBookmark(${b.id})">
+        <img class="bm-favicon" src="${getFavicon(b.url)}" onerror="this.style.display='none'" loading="lazy" width="18" height="18">
+        <div class="bm-content">
+          <div class="bm-title">${escapeHtml(b.title)}</div>
+          <div class="bm-meta">${escapeHtml(getDomain(b.url))}</div>
+        </div>
+        <div class="bm-actions">
+          <button class="action-btn btn-keep ${b.decision==='keep'?'active':''}" onclick="event.stopPropagation();decide(${b.id},'keep')" title="Keep (K)">✓</button>
+          <button class="action-btn btn-star ${b.decision==='star'?'active':''}" onclick="event.stopPropagation();decide(${b.id},'star')" title="Priority (S)">★</button>
+          <button class="action-btn btn-delete ${b.decision==='delete'?'active':''}" onclick="event.stopPropagation();decide(${b.id},'delete')" title="Delete (D)">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+  
+  if (filtered.length === 0) {
+    html = `<div style="padding:48px;text-align:center;color:var(--arc-gray-300);">
+      <p style="font-size:16px;">No bookmarks match this filter</p>
+      <p style="font-size:13px;margin-top:8px;">Try a different filter or clear your search</p>
+    </div>`;
+  }
+  
+  list.innerHTML = html;
+  updateStats();
+}
+
+function updateStats() {
+  const keep = bookmarks.filter(b => b.decision === 'keep').length;
+  const star = bookmarks.filter(b => b.decision === 'star').length;
+  const del = bookmarks.filter(b => b.decision === 'delete').length;
+  const remaining = bookmarks.length - keep - star - del;
+  const pct = Math.round(((keep + star + del) / bookmarks.length) * 100);
+  
+  document.getElementById('stat-keep').textContent = keep;
+  document.getElementById('stat-star').textContent = star;
+  document.getElementById('stat-delete').textContent = del;
+  document.getElementById('stat-remaining').textContent = remaining;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function selectBookmark(id) {
+  selectedIdx = id;
+  const b = bookmarks.find(x => x.id === id);
+  if (!b) return;
+  
+  document.querySelectorAll('.bookmark-card').forEach(el => el.classList.remove('selected'));
+  const card = document.querySelector(`.bookmark-card[data-id="${id}"]`);
+  if (card) {
+    card.classList.add('selected');
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  
+  document.getElementById('preview-header').style.display = 'flex';
+  document.getElementById('preview-url').textContent = b.url;
+  document.getElementById('preview-open').href = b.url;
+  document.getElementById('preview-placeholder').style.display = 'none';
+  const frame = document.getElementById('preview-frame');
+  frame.style.display = 'block';
+  frame.src = b.url;
+}
+
+function decide(id, decision) {
+  const b = bookmarks.find(x => x.id === id);
+  if (!b) return;
+  
+  const old = b.decision;
+  b.decision = b.decision === decision ? null : decision;
+  undoHistory.push({ id, oldDecision: old, newDecision: b.decision });
+  
+  if (b.decision) showToast(`"${b.title.substring(0,35)}…" → ${b.decision.toUpperCase()}`);
+  
+  // Auto-advance
+  if (b.decision !== null) {
+    const ci = visibleIds.indexOf(id);
+    const next = visibleIds.find((vid, i) => i > ci && !bookmarks.find(x => x.id === vid).decision);
+    if (next !== undefined) setTimeout(() => selectBookmark(next), 120);
+  }
+  
+  renderList();
+  debouncedSave();
+}
+
+function bulkFolder(groupName, decision) {
+  const filtered = getFilteredBookmarks();
+  const affected = filtered.filter(b => getTopFolder(b.folder) === groupName);
+  affected.forEach(b => {
+    undoHistory.push({ id: b.id, oldDecision: b.decision, newDecision: decision });
+    b.decision = decision;
+  });
+  showToast(`${affected.length} bookmarks → ${decision.toUpperCase()}`);
+  renderList();
+  debouncedSave();
+}
+
+function undo() {
+  if (undoHistory.length === 0) return;
+  const last = undoHistory.pop();
+  const b = bookmarks.find(x => x.id === last.id);
+  if (b) { b.decision = last.oldDecision; showToast('Undone'); renderList(); debouncedSave(); }
+}
+
+function resetAll() {
+  if (!confirm('Reset ALL decisions? This cannot be undone.')) return;
+  bookmarks.forEach(b => b.decision = null);
+  undoHistory = [];
+  localStorage.removeItem(STORAGE_KEY);
+  showToast('All decisions cleared');
+  renderList();
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  toast.classList.add('visible');
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => toast.classList.remove('visible'), 2200);
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function exportBookmarks() {
+  const kept = bookmarks.filter(b => b.decision === 'keep' || b.decision === 'star');
+  if (kept.length === 0) { alert('No bookmarks marked as Keep or ★ Priority yet!'); return; }
+  
+  let lines = [
+    '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+    '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+    '<TITLE>Bookmarks</TITLE><H1>Bookmarks</H1>',
+    '<DL><p>',
+    '    <DT><H3 PERSONAL_TOOLBAR_FOLDER="true">Bookmarks Bar</H3>',
+    '    <DL><p>',
+  ];
+  
+  const starred = kept.filter(b => b.decision === 'star');
+  const regular = kept.filter(b => b.decision === 'keep');
+  
+  if (starred.length) {
+    lines.push('        <DT><H3>★ Priority</H3>', '        <DL><p>');
+    starred.forEach(b => lines.push(`            <DT><A HREF="${escapeHtml(b.url)}">${escapeHtml(b.title)}</A>`));
+    lines.push('        </DL><p>');
+  }
+  
+  const groups = {};
+  regular.forEach(b => { const g = getTopFolder(b.folder); if (!groups[g]) groups[g] = []; groups[g].push(b); });
+  for (const [name, items] of Object.entries(groups)) {
+    lines.push(`        <DT><H3>${escapeHtml(name)}</H3>`, '        <DL><p>');
+    items.forEach(b => lines.push(`            <DT><A HREF="${escapeHtml(b.url)}">${escapeHtml(b.title)}</A>`));
+    lines.push('        </DL><p>');
+  }
+  
+  lines.push('    </DL><p>', '</DL><p>');
+  const blob = new Blob([lines.join('\n')], { type: 'text/html' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'bookmarks_triaged.html'; a.click();
+  showToast(`Exported ${kept.length} bookmarks`);
+}
+
+function exportJSON() {
+  const data = {
+    exported: new Date().toISOString(),
+    summary: {
+      total: bookmarks.length,
+      keep: bookmarks.filter(b => b.decision === 'keep').length,
+      star: bookmarks.filter(b => b.decision === 'star').length,
+      delete: bookmarks.filter(b => b.decision === 'delete').length,
+      undecided: bookmarks.filter(b => !b.decision).length,
+    },
+    bookmarks: bookmarks.map(b => ({ title: b.title, url: b.url, folder: b.folder, decision: b.decision || 'undecided' }))
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'bookmark_triage_progress.json'; a.click();
+  showToast('Progress exported as JSON');
+}
+
+// ============================================================
+// FILTERS & SEARCH
+// ============================================================
+document.querySelectorAll('.filter-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeFilter = pill.dataset.filter;
+    renderList();
+  });
+});
+
+document.getElementById('search-input').addEventListener('input', (e) => {
+  searchQuery = e.target.value;
+  renderList();
+});
+
+// ============================================================
+// KEYBOARD
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  if (document.activeElement.tagName === 'INPUT') {
+    if (e.key === 'Escape') document.activeElement.blur();
+    return;
+  }
+  const key = e.key.toLowerCase();
+  if (key === 'k' && selectedIdx >= 0) { decide(selectedIdx, 'keep'); e.preventDefault(); }
+  if (key === 's' && selectedIdx >= 0) { decide(selectedIdx, 'star'); e.preventDefault(); }
+  if (key === 'd' && selectedIdx >= 0) { decide(selectedIdx, 'delete'); e.preventDefault(); }
+  if (key === 'z') { undo(); e.preventDefault(); }
+  if (e.key === 'ArrowDown' || key === 'j') {
+    e.preventDefault();
+    const ci = visibleIds.indexOf(selectedIdx);
+    if (ci < visibleIds.length - 1) selectBookmark(visibleIds[ci + 1]);
+    else if (ci === -1 && visibleIds.length > 0) selectBookmark(visibleIds[0]);
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const ci = visibleIds.indexOf(selectedIdx);
+    if (ci > 0) selectBookmark(visibleIds[ci - 1]);
+  }
+  if (key === '/' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault();
+    document.getElementById('search-input').focus();
+  }
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>
